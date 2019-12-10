@@ -29,7 +29,7 @@ double dot_product(double vector1[3], double vector2[3]) {
 
 double cross_product(double result[3], double vector1[3], double vector2[3]) {
     result[0] =   (vector1[1] * vector2[2]) - (vector1[2] * vector2[1]);
-    result[1] = -((vector1[0] * vector2[2]) - (vector1[2] * vector2[1]));
+    result[1] = -((vector1[0] * vector2[2]) - (vector1[2] * vector2[0]));
     result[2] =   (vector1[0] * vector2[1]) - (vector1[1] * vector2[0]);
 }
 
@@ -44,7 +44,7 @@ int make_perp_vector(double perp_vector[3],
 		     double x2, double y2, double z2,
 		     double x3, double y3, double z3) {
     double vector1[3], vector2[3];
-    make_vector(vector1,  x1, y1, z1, x2, y2, z2);
+    make_vector(vector1, x1, y1, z1, x2, y2, z2);
     make_vector(vector2, x1, y1, z1, x3, y3, z3);
 
     cross_product(perp_vector, vector1, vector2);
@@ -134,48 +134,62 @@ double find_intensity(double x_points[5000], double y_points[5000], double z_poi
     perp_vector[2] /= perp_length;
 
     // If light and eye are on opposite sides, intensity = ambinet
-    double dot_lite_view = dot_product(lite_vector, view_vector);
+    //    double dot_lite_view = dot_product(lite_vector, view_vector);
     double dot_lite_perp = dot_product(lite_vector, perp_vector);
     double dot_view_perp = dot_product(view_vector, perp_vector);
 
-    if (dot_lite_view < 0) {
+    // if light is on the other side of the polygon, just use ambient light
+    if (dot_lite_perp * dot_view_perp < 0) {
         return ambient;
     }
 
     // if light and eye are on opposite side of normal vector, reverse perp vector
     else if (dot_lite_perp < 0 && dot_view_perp < 0) {
-        perp_vector[0] = -perp_vector[0];
-        perp_vector[1] = -perp_vector[1];
-        perp_vector[2] = -perp_vector[2];
-        printf("Inverted\n");
+        perp_vector[0] *= -1;
+        perp_vector[1] *= -1;
+        perp_vector[2] *= -1;
+
+	dot_lite_perp *= -1 ;
+	dot_view_perp *= -1 ;	
+	
     }
 
     // find reflection vector, Ru = -Lu + 2(Nu . Lu) . Nu
     double refl_vector[3];
-    refl_vector[0] = -lite_vector[0] + 2 * (dot_product(perp_vector, lite_vector) * perp_vector[0]);
-    refl_vector[1] = -lite_vector[1] + 2 * (dot_product(perp_vector, lite_vector) * perp_vector[1]);
-    refl_vector[2] = -lite_vector[2] + 2 * (dot_product(perp_vector, lite_vector) * perp_vector[2]);
+    refl_vector[0] = -lite_vector[0] + 2 * (dot_lite_perp * perp_vector[0]);
+    refl_vector[1] = -lite_vector[1] + 2 * (dot_lite_perp * perp_vector[1]);
+    refl_vector[2] = -lite_vector[2] + 2 * (dot_lite_perp * perp_vector[2]);
 
     //printf("Ambient %lf\n", ambient);
     //TODO issue with perp and lite vectors here. Is this because of the values? Math seems to check out
-    double perplite = (diffuse_max * dot_product(perp_vector, lite_vector));
-    printf("Perp/lite %lf\n", perplite);
-    printf("Dot %lf\n", (dot_product(perp_vector, lite_vector)));
-    printf("Perp %lf, %lf, %lf, lite %lf, %lf, %lf\n", perp_vector[0], perp_vector[1], perp_vector[2], lite_vector[0], lite_vector[1], lite_vector[2]);
-    // double viewrefl = ((1 - ambient - diffuse_max) * dot_product(view_vector, refl_vector));
+
+    //
+    //printf("Dot %lf\n", (dot_product(perp_vector, lite_vector)));
+    //printf("Perp %lf, %lf, %lf, lite %lf, %lf, %lf\n", perp_vector[0], perp_vector[1], perp_vector[2], lite_vector[0], lite_vector[1], lite_vector[2]);
+    //
     // printf("View/refl %lf\n", viewrefl);
 
-    return (ambient + (diffuse_max * dot_product(perp_vector, lite_vector)) + ((1 - ambient - diffuse_max) * dot_product(view_vector, refl_vector)));
+    double intensity = ambient + diffuse_max * dot_lite_perp + (1 - ambient - diffuse_max) * pow(dot_product(view_vector, refl_vector),50);
+
+    if (intensity > 1 || intensity < 0) {
+        printf("Intensity %lf\n", intensity);
+        double perplite = (diffuse_max * dot_product(perp_vector, lite_vector));
+        double viewrefl = ((1 - ambient - diffuse_max) * dot_product(view_vector, refl_vector));
+        printf("Perp/lite %lf\n", perplite);
+        printf("View/refl %lf\n", viewrefl);
+
+        printf("\n");
+    }
+
+    return intensity;
 }
 
 int set_rgb(double x_points[5000], double y_points[5000], double z_points[5000], int length) {
     double intensity = find_intensity(x_points, y_points, z_points, length);
 
-    printf("Intensity %lf\n", intensity);
-
-    double red = 0.5;
-    double gre = 0.5;
-    double blu = 0.5;
+    double red = 0.75;
+    double gre = 0;
+    double blu = 0.75;
 
     double constants = ambient + diffuse_max;
 
@@ -184,6 +198,7 @@ int set_rgb(double x_points[5000], double y_points[5000], double z_points[5000],
         gre *= intensity / constants;
         blu *= intensity / constants;
     }
+    // is this the right equation?
     else if (intensity > (ambient + diffuse_max)) {
         red *= ((intensity - constants) / (1 - constants)) + 1;
         gre *= ((intensity - constants) / (1 - constants)) + 1;
@@ -192,6 +207,7 @@ int set_rgb(double x_points[5000], double y_points[5000], double z_points[5000],
 
     printf("RGB %lf %lf %lf\n\n", red, gre, blu);
     G_rgb(red, gre, blu);
+    //G_rgb(intensity,intensity,intensity);
 }
 
 void draw_polygon(int num_objects) {
@@ -274,9 +290,12 @@ void draw_polygon(int num_objects) {
             z_points[point] = z[obj_num][con[obj_num][poly_num][point]];
         }
 
+
+        set_rgb(x_points, y_points, z_points, psize[obj_num][poly_num]);
+	
         // do math to calculate 3d aspect of this shape
         double x_bar, y_bar, x_barbar, y_barbar, h;
-        h = tan(45);
+        h = tan(45*M_PI/180);
 
         for (int point = 0; point < psize[obj_num][poly_num]; point++) {
             x_bar = x_points[point] / z_points[point];
@@ -289,8 +308,10 @@ void draw_polygon(int num_objects) {
             y_points[point] = y_barbar;
         }
 
+	
+
         // print polygon
-        set_rgb(x_points, y_points, z_points, psize[obj_num][poly_num]);
+
         //G_rgb(0, 1, 0);
         G_fill_polygon(x_points, y_points, psize[obj_num][poly_num]);
 
@@ -299,9 +320,9 @@ void draw_polygon(int num_objects) {
 }
 
 int main(int argc, char **argv) {
-    light[0] = 500;
-    light[1] = 500;
-    light[2] = 100;
+  light[0] = 100 ;
+  light[1] = 200 ;
+  light[2] = 0 ;
     ambient = 0.2;
     diffuse_max = 0.5;
 
